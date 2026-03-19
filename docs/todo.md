@@ -1,18 +1,19 @@
-# anki-remote-api v0 TODO
+# anki-remote-api v0 — TODO
 
-## A. 预研 / 基础
+## A. Research / Foundations
 
-- [ ] 确认容器内运行 Anki + AnkiConnect 的最小可行方案
-- [ ] 确认 API service 到 AnkiConnect 的调用方式与健康检查
-- [ ] 确认 AnkiConnect 查询 note / 更新 note 所需接口
+- [ ] Confirm minimal viable setup for running Anki + AnkiConnect inside a container
+- [ ] Confirm API service → AnkiConnect call pattern and health check approach
+- [ ] Confirm AnkiConnect interfaces needed for note lookup and update
 
-## B. API service 骨架
+## B. API Service Skeleton
 
-- [ ] 初始化 FastAPI 项目
-- [ ] 实现 `/health`
-- [ ] 增加 AnkiConnect client 封装
-- [ ] 增加配置加载（token / anki 地址 / storage）
-- [ ] 增加认证中间件
+- [ ] Initialize Go module and project layout
+- [ ] Implement `GET /health`
+- [ ] Add AnkiConnect client wrapper
+- [ ] Add config loading (`DATABASE_URL`, `ANKICONNECT_URL`, `API_TOKEN`, `LISTEN_ADDR`)
+- [ ] Add Bearer token authentication middleware
+- [ ] Wire up `database/sql` with scheme-based driver selection (sqlite / postgres)
 
 ## C. Deck API
 
@@ -22,72 +23,73 @@
 
 ## D. Template API
 
-- [ ] 定义 template 存储模型
-- [ ] 实现 `vocab-basic` 初始模板
+- [ ] Define template storage model
+- [ ] Seed `vocab-basic` initial template
 - [ ] `GET /v0/templates`
 - [ ] `GET /v0/templates/{id}`
 - [ ] `POST /v0/templates`
 - [ ] `PATCH /v0/templates/{id}`
-- [ ] （可选）`POST /v0/templates/{id}/render-preview`
+- [ ] (optional) `POST /v0/templates/{id}/render-preview`
 
 ## E. Note API
 
-- [ ] 定义 note payload 模型
-- [ ] 实现 canonical_term 归一化
+- [ ] Define note payload struct and validation
+- [ ] Implement `canonical_term` normalization
 - [ ] `POST /v0/notes/lookup`
 - [ ] `POST /v0/notes`
 - [ ] `PATCH /v0/notes/{note_id}`
 - [ ] `POST /v0/notes/upsert`
 
-## F. Merge 逻辑
+## F. Merge Logic
 
-- [ ] meanings 去重合并
-- [ ] examples 去重合并
-- [ ] tags 合并
-- [ ] phonetic/audio replace 策略
-- [ ] 渲染为 Anki fields 的 HTML 输出
+- [ ] `meanings` dedup and merge
+- [ ] `examples` dedup and merge
+- [ ] `tags` set union
+- [ ] `phonetic` / `audio_url` replace strategy
+- [ ] Render `meanings` and `examples` to Anki HTML fields
 
-## G. 容器化
+## G. Containerization
 
-- [ ] 设计 container 目录结构
-- [ ] 编写 Dockerfile / compose 示例
-- [ ] 挂载独立 profile / media / config
-- [ ] 配置 API service 与 AnkiConnect 联通
-- [ ] 容器启动健康检查测试
+- [ ] Design container directory structure
+- [ ] Write Dockerfile and docker-compose example
+- [ ] Mount isolated profile / media / config volumes
+- [ ] Configure API service ↔ AnkiConnect networking
+- [ ] Container startup health check
 
-## H. Skill 接入
+## H. Discord Skill Integration
 
-- [ ] 设计 binding DB 结构
-- [ ] 提供 binding 查询接口或查询逻辑
-- [ ] 在 skill 中按 `discord_user_id` 路由
-- [ ] skill 调用 `/v0/notes/upsert`
-- [ ] skill 返回用户可读结果
+- [ ] Design Binding DB schema (`anki_user_bindings`)
+- [ ] Provide binding query interface or logic
+- [ ] Route by `discord_user_id` in skill
+- [ ] Skill calls `POST /v0/notes/upsert`
+- [ ] Skill returns human-readable result
 
-## I. 测试
+## I. Testing
 
-- [ ] deck create/list 集成测试
-- [ ] note create 集成测试
-- [ ] note lookup/update 集成测试
-- [ ] upsert created/updated 路径测试
-- [ ] merge 去重测试
+- [ ] Deck create / list integration tests
+- [ ] Note create integration test
+- [ ] Note lookup / update integration test
+- [ ] Upsert: `created` path test
+- [ ] Upsert: `updated` path test
+- [ ] Merge dedup test
 
 ---
 
-## 优先级
+## Priority
 
 ### P0
-- 单用户 container 跑通
-- deck API
-- note create/find/update
-- `vocab-basic` 模板
-- upsert
+- Container up and running (Anki + AnkiConnect)
+- Deck API
+- Note create / find / update
+- `vocab-basic` template
+- Upsert endpoint
 
 ### P1
-- template CRUD
-- render-preview
-- binding DB 接入 skill
+- Template CRUD
+- Render preview
+- Binding DB + skill integration
 
 ### P2
-- 更完善的媒体策略
-- 多模板支持
-- 自动化部署/复制 container
+- Extended media strategy
+- Multi-template support
+- Automated container provisioning

@@ -1,42 +1,57 @@
 # anki-remote-api
 
-远程建卡 API 服务，为 Anki 提供标准化的 HTTP 接口，支持通过 Discord skill 等外部调用方远程创建和更新卡片。
+A lightweight HTTP API service for remote Anki card creation and management.
 
-## 目标
+Designed to sit between external callers (e.g. Discord bots, CLI tools) and a per-user Anki Desktop instance, handling deduplication, upsert logic, and template management on top of AnkiConnect.
 
-- 接收结构化词卡数据（词、释义、例句、音标等）
-- 按用户路由到对应的 Anki container
-- 查重（dedup）后决定新建或合并更新（upsert）
-- 通过 AnkiConnect 写入 Anki Desktop
+## What it does
 
-## 架构
+- Accepts structured flashcard payloads over HTTP
+- Deduplicates by `canonical_term` before writing
+- Creates or merge-updates notes via AnkiConnect
+- Manages deck and business template configuration
+
+## Architecture
 
 ```
-Discord skill
-     ↓
-Binding DB / Registry
-     ↓
-Per-user API service  ← 本项目
-     ↓
-AnkiConnect
-     ↓
-Anki Desktop
+Discord skill (or any HTTP caller)
+        ↓
+  Binding DB / Registry
+        ↓
+  anki-remote-api  ← this project
+        ↓
+   AnkiConnect
+        ↓
+  Anki Desktop
 ```
 
-每个用户对应一个独立 container，隔离 profile / media / config / token。
+Each user gets an isolated container with its own Anki profile, media directory, and API token.
 
-## 技术栈
+## Tech stack
 
-- Python + FastAPI
-- AnkiConnect（Anki addon）
-- SQLite（template registry）
-- Docker（per-user container）
+- **Go** — single binary, clean container image
+- **Gin** — HTTP framework
+- **database/sql** — DB layer with pluggable drivers
+  - SQLite (`modernc.org/sqlite`, no CGO) — for local / open-source use
+  - PostgreSQL (`pgx`) — for production
+- **AnkiConnect** — Anki addon, handles low-level note/deck operations
 
-## 快速开始
+## Configuration
 
-> WIP — Phase 1 进行中
+| Env var | Description | Example |
+|---------|-------------|---------|
+| `DATABASE_URL` | DB connection string | `postgres://user:pass@host/db` or `sqlite:///data/anki.db` |
+| `ANKICONNECT_URL` | AnkiConnect endpoint | `http://localhost:8765` |
+| `API_TOKEN` | Bearer token for this service | `your-secret-token` |
+| `LISTEN_ADDR` | HTTP listen address | `:8080` |
 
-## 文档
+The DB driver is selected automatically from the `DATABASE_URL` scheme.
 
-- [v0 实现方案](docs/v0-design.md)
+## Documentation
+
+- [v0 Design](docs/v0-design.md)
 - [TODO](docs/todo.md)
+
+## Status
+
+> Phase 1 in progress

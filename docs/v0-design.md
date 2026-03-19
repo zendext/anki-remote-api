@@ -1,142 +1,120 @@
-# anki-remote-api v0 实现方案
+# anki-remote-api — v0 Design
 
-## 1. 目标与范围
+## 1. Goals and scope
 
-### 目标
+### Goals
 
-实现一个面向 Anki 的远程建卡 v0 系统，支持：
+Build a v0 remote card creation system for Anki that supports:
 
-- 由 Discord skill 生成结构化卡片数据
-- 按用户路由到对应的 Anki container
-- 在 container 内通过 `API service + AnkiConnect + Anki` 完成写卡
-- 支持 deck 管理、template/schema 管理、note lookup/create/update/upsert
+- Receiving structured flashcard data from external callers (Discord skill, CLI, etc.)
+- Routing per user to the correct Anki container
+- Writing cards via `API service → AnkiConnect → Anki Desktop`
+- Managing decks, business templates, and note lifecycle (lookup / create / update / upsert)
 
-### v0 明确范围
+### In scope for v0
 
-- 单个 container 仅服务一个 Anki 用户
-- 系统整体允许通过多个 container 扩展到多用户
-- Discord skill 通过 DB 维护 `discord_user_id -> anki_user/container` 绑定
-- container 内优先使用 **AnkiConnect addon**，不自研 addon
-- 音频/媒体前期只接受外部 URL，不做 TTS 服务
-- schema/template 由 API service 自己维护，不依赖 AnkiConnect 提供业务 schema
+- One container = one Anki user
+- Multi-user supported by running multiple containers
+- Discord skill maintains `discord_user_id → anki_user/container` binding in a shared DB
+- Uses AnkiConnect addon — no custom addon
+- Media: accept external URLs only; no TTS generation
+- Business template/schema managed by this service, not by AnkiConnect
 
-### v0 不做
+### Out of scope for v0
 
-- 单实例多租户
-- 自研 Anki addon
-- 复杂模板迁移
-- 平台级自动调度与自动扩缩容
-- 高级权限系统
-- TTS 生成
+- Single-instance multi-tenancy
+- Custom Anki addon development
+- Complex template migration
+- Auto-scaling or orchestration
+- Advanced permission system
+- TTS generation
 
 ---
 
-## 2. 总体架构
+## 2. Architecture
 
 ```
-Discord skill
-     ↓
-Binding DB / Registry
-     ↓
-Per-user API service
-     ↓
-AnkiConnect
-     ↓
-Anki Desktop
+Discord skill (or any HTTP caller)
+        ↓
+  Binding DB / Registry
+        ↓
+  anki-remote-api (per-user container)
+        ↓
+   AnkiConnect
+        ↓
+  Anki Desktop
 ```
 
-### 职责划分
+### Component responsibilities
 
-#### Discord skill
-- 读取当前 Discord user id
-- 从 DB 查询对应的 Anki container/service 信息
-- 调用对应 API service
-- 把外部生成的结构化词卡数据提交过去
-
-#### Binding DB / Registry
-- 存储 `discord_user_id -> anki_user_id/service_url/token/status`
-- 后续可扩展为 registry/service discovery
-
-#### Per-user API service
-- deck API
-- business template/schema API
-- lookup/create/update/upsert
-- dedupe
-- merge/update 规则
-- 调用 AnkiConnect 执行底层写入
-
-#### AnkiConnect
-- deck list/create
-- note create/find/update
-- model/fields 基础查询
-- tags / 媒体相关底层能力（v0 媒体先不深用）
-
-#### Anki Desktop
-- 持有该用户独立 collection/profile
-- 最终存储卡片
+| Component | Responsibilities |
+|-----------|-----------------|
+| Discord skill | Resolve `discord_user_id` → look up binding → build card payload → call `/v0/notes/upsert` |
+| Binding DB | Store `discord_user_id → service_base_url + token + status` |
+| anki-remote-api | Deck API, template API, lookup/upsert, dedup, merge rules, call AnkiConnect |
+| AnkiConnect | Deck list/create, note create/find/update, model/field queries |
+| Anki Desktop | Hold the user's isolated collection; final card storage |
 
 ---
 
-## 3. 容器设计
+## 3. Container design
 
-每个用户一个 container，推荐最小组成：
+Each user runs one container. Minimum contents:
 
-- `anki`
-- `ankiconnect`
-- `anki-api-service`
+1. **Anki Desktop** — isolated profile + data directory mount
+2. **AnkiConnect addon** — exposes local HTTP to the API service
+3. **anki-remote-api** — the service in this repo
+4. **Local storage** — template registry (SQLite or PostgreSQL), service config
 
-### 推荐容器内组件
+### Isolation per container
 
-1. **Anki Desktop** — 使用独立 profile / collection，挂载独立数据目录
-2. **AnkiConnect addon** — 暴露本地 HTTP 接口给 API service 调用
-3. **API service** — 推荐 FastAPI，暴露业务层 HTTP API
-4. **本地配置/存储** — template registry（JSON / SQLite）、service config
-
-### 每个 container 需要隔离的内容
-
-- collection/profile
-- media 目录
-- 配置文件
-- token
-- deck/model 使用状态
+- Anki collection / profile
+- Media directory
+- Config files
+- API token
+- Deck / model state
 
 ---
 
-## 4. 数据模型
+## 4. Data models
 
 ### 4.1 Binding DB
 
-表：`anki_user_bindings`
+Table: `anki_user_bindings`
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `discord_user_id` | string, unique | Discord 用户 ID |
-| `anki_user_id` | string | Anki 用户标识 |
-| `service_base_url` | string | API service 地址 |
+| Column | Type | Notes |
+|--------|------|-------|
+| `discord_user_id` | string, unique | Discord user ID |
+| `anki_user_id` | string | Internal Anki user identifier |
+| `service_base_url` | string | URL of this service instance |
 | `service_token` | string | Bearer token |
-| `status` | string | `active\|disabled\|pending` |
-| `created_at` | datetime | |
-| `updated_at` | datetime | |
+| `status` | string | `active \| disabled \| pending` |
+| `created_at` | timestamp | |
+| `updated_at` | timestamp | |
 
-可扩展字段：`default_template_id`、`default_deck`、`notes`
+Optional extensions: `default_template_id`, `default_deck`, `notes`.
 
-### 4.2 Template（业务 schema）
+### 4.2 Business template
 
-这是 API service 维护的业务模板，不直接等于底层 Anki model。
+Managed by this service; not tied to the AnkiConnect model layer.
 
-建议字段：
+Fields:
 
-- `id`
-- `version`
-- `name`
-- `description`
-- `defaults`：`deck`、`tags`
-- `dedupe`：`by: canonical_term`
-- `schema`（JSON Schema 风格）
-- `mapping`：`anki_model`、`field_map`
-- `render_rules`：`meanings -> html`、`examples -> html`
+| Field | Description |
+|-------|-------------|
+| `id` | Template identifier (e.g. `vocab-basic`) |
+| `version` | Schema version |
+| `name` | Display name |
+| `description` | |
+| `defaults.deck` | Default deck name |
+| `defaults.tags` | Default tags |
+| `dedupe.by` | Dedup key — always `canonical_term` for v0 |
+| `schema` | JSON Schema for the note payload |
+| `mapping.anki_model` | Target Anki model name |
+| `mapping.field_map` | Payload field → Anki field mapping |
+| `render_rules` | How to render `meanings` / `examples` to HTML |
 
-### 4.3 标准词卡模型（v0 主模板：vocab-basic）
+### 4.3 Note payload — vocab-basic (v0 primary template)
 
 ```json
 {
@@ -153,7 +131,7 @@ Anki Desktop
   "examples": [
     {
       "text": "The storm suddenly abated.",
-      "translation": "暴风雨突然减弱了。"
+      "translation": "The storm suddenly weakened."
     }
   ],
   "audio_url": "https://example.com/abate.mp3",
@@ -165,44 +143,54 @@ Anki Desktop
 }
 ```
 
-### 4.4 canonical_term 规则
+### 4.4 canonical_term normalization
 
-- trim
-- 小写化
-- collapse whitespace
-- 短语空格归一
+Rules applied in order:
 
-例：`Abate`、` abate `、`ABATE` → 统一为 `abate`
+1. Trim leading/trailing whitespace
+2. Lowercase
+3. Collapse internal whitespace to single space
+
+Examples: `Abate`, ` abate `, `ABATE` → `abate`
 
 ---
 
-## 5. API 设计
+## 5. API design
 
 ### 5.1 Health
 
-#### `GET /health`
+```
+GET /health
+```
 
-返回 service、AnkiConnect、Anki 状态。
+Returns status of: service, AnkiConnect, Anki Desktop.
+
+```json
+{
+  "service": "ok",
+  "ankiconnect": "ok",
+  "anki": "ok"
+}
+```
 
 ---
 
 ### 5.2 Deck API
 
-#### `GET /v0/decks`
-列出可用 decks。
+```
+GET  /v0/decks
+POST /v0/decks
+POST /v0/decks/ensure
+```
 
-#### `POST /v0/decks`
-创建 deck。
+#### POST /v0/decks/ensure
 
-请求：
+Request:
 ```json
 { "name": "English::Words" }
 ```
 
-#### `POST /v0/decks/ensure`
-确保 deck 存在（不存在则创建）。
-
-返回：
+Response:
 ```json
 {
   "exists": true,
@@ -215,21 +203,23 @@ Anki Desktop
 
 ### 5.3 Template API
 
-#### `GET /v0/templates`
-#### `GET /v0/templates/{template_id}`
-#### `POST /v0/templates`
-#### `PATCH /v0/templates/{template_id}`
-#### `POST /v0/templates/{template_id}/render-preview`（可选）
+```
+GET   /v0/templates
+GET   /v0/templates/{template_id}
+POST  /v0/templates
+PATCH /v0/templates/{template_id}
+POST  /v0/templates/{template_id}/render-preview  (optional)
+```
 
 ---
 
 ### 5.4 Note API
 
-#### `POST /v0/notes/lookup`
+#### POST /v0/notes/lookup
 
-按 `template_id + deck + canonical_term` 查重。
+Dedup check by `template_id + deck + canonical_term`.
 
-请求：
+Request:
 ```json
 {
   "template_id": "vocab-basic",
@@ -238,7 +228,7 @@ Anki Desktop
 }
 ```
 
-返回：
+Response:
 ```json
 {
   "found": true,
@@ -247,17 +237,19 @@ Anki Desktop
 }
 ```
 
-#### `POST /v0/notes`
-新建 note。
+#### POST /v0/notes
 
-#### `PATCH /v0/notes/{note_id}`
-更新 note，支持 `replace` 和 `merge` 两种模式。
+Create a new note.
 
-#### `POST /v0/notes/upsert`
+#### PATCH /v0/notes/{note_id}
 
-skill 主要调用此接口。
+Update a note. Supports two modes: `replace` and `merge`.
 
-请求：
+#### POST /v0/notes/upsert
+
+Primary endpoint for external callers.
+
+Request:
 ```json
 {
   "template_id": "vocab-basic",
@@ -267,107 +259,117 @@ skill 主要调用此接口。
 }
 ```
 
-返回：
+Response (created):
 ```json
 { "action": "created", "note_id": "1712345678901" }
 ```
-或：
+
+Response (updated):
 ```json
-{ "action": "updated", "note_id": "1712345678901", "updated_fields": ["meanings", "examples"] }
+{
+  "action": "updated",
+  "note_id": "1712345678901",
+  "updated_fields": ["meanings", "examples"]
+}
 ```
 
 ---
 
-## 6. Merge / Update 规则
+## 6. Merge / update rules
 
-### replace
-直接覆盖字段。适合：`phonetic`、gloss 修正、`audio_url`。
-
-### merge
-语义合并。适合：`meanings`、`examples`、`tags`、`source`。
-
-| 字段 | 策略 |
-|------|------|
-| `meanings` | 按 `pos + gloss_zh + gloss_en` 去重 |
-| `examples` | 按 `text + translation` 去重 |
-| `tags` | 集合去重 |
-| `audio_url` | v0 默认 replace |
-| `phonetic` | 默认 replace，非空新值覆盖空旧值 |
+| Field | Strategy | Rule |
+|-------|----------|------|
+| `meanings` | merge | Deduplicate by `pos + gloss_zh + gloss_en` |
+| `examples` | merge | Deduplicate by `text + translation` |
+| `tags` | merge | Set union |
+| `audio_url` | replace | Always overwrite |
+| `phonetic` | replace | Non-empty new value overwrites; empty new value is ignored |
 
 ---
 
-## 7. 与 AnkiConnect 的边界
+## 7. AnkiConnect boundary
 
-| 层 | 负责内容 |
-|----|---------|
-| AnkiConnect | deck list/create、note create/find/update、tags、model/field 查询 |
-| API service | business template/schema、dedupe、canonical_term、merge 规则、render rules、upsert 语义 |
-
----
-
-## 8. Skill 调用流程
-
-1. skill 获取当前 `discord_user_id`
-2. skill 查询 Binding DB，获得 `service_base_url` 和 `service_token`
-3. skill 生成结构化词卡 payload
-4. skill 调用目标 container 的 `/v0/notes/upsert`
-5. service 返回 `created/updated`
-6. skill 向用户反馈结果
+| Layer | Handles |
+|-------|---------|
+| AnkiConnect | Deck list/create, note create/find/update, tags, model/field queries |
+| anki-remote-api | Business templates, dedup, canonical_term, merge rules, render rules, upsert semantics |
 
 ---
 
-## 9. 技术选型
+## 8. Skill call flow
 
-| 组件 | 选型 | 原因 |
-|------|------|------|
-| API service | Python + FastAPI | 开发快，pydantic 支持好，易接词典/TTS |
-| 存储 | SQLite（per-container templates）| v0 够用，无需额外依赖 |
-| Binding DB | 独立，放 skill 所在系统侧 | 解耦 |
-| 通信 | skill → API service：HTTP + Bearer token | 简单安全 |
-| 通信 | API service → AnkiConnect：本地 HTTP | container 内部 |
-
----
-
-## 10. 安全边界
-
-- 不直接把 AnkiConnect 暴露给外部 skill
-- skill 只访问 API service
-- 每个 container 配独立 token
-- API service 仅监听容器内部或受控网络
+1. Skill resolves `discord_user_id`
+2. Skill queries Binding DB → gets `service_base_url` + `service_token`
+3. Skill builds structured note payload
+4. Skill calls `POST /v0/notes/upsert` on the target container
+5. Service returns `created` or `updated`
+6. Skill reports result to user
 
 ---
 
-## 11. 分阶段实施计划
+## 9. Tech stack
 
-### Phase 1：底层执行通路
-- 起单用户 container，跑通 Anki + AnkiConnect
-- API service 实现：health、deck list/create、note create/find/update
+| Component | Choice | Reason |
+|-----------|--------|--------|
+| Language | Go | Single binary, clean container image, strong typing |
+| HTTP framework | Gin | Lightweight, idiomatic |
+| DB layer | `database/sql` with pluggable drivers | Driver selected from `DATABASE_URL` scheme |
+| SQLite driver | `modernc.org/sqlite` | Pure Go, no CGO required |
+| PostgreSQL driver | `pgx` | Production use |
+| Storage | SQLite (open-source/local) or PostgreSQL (production) | |
+| Internal comms | AnkiConnect via `net/http` | Standard library, no extra deps |
 
-### Phase 2：业务模板层
-- 定义 `vocab-basic` 模板
-- template CRUD
-- render rules
-- canonical_term
+### DATABASE_URL scheme routing
 
-### Phase 3：upsert 能力
-- lookup
-- merge/update 规则
-- `/v0/notes/upsert`
+| Scheme | Driver |
+|--------|--------|
+| `sqlite://` | `modernc.org/sqlite` |
+| `postgres://` or `postgresql://` | `pgx` |
 
-### Phase 4：Discord skill 接入
-- Binding DB
-- skill 读 binding 并路由
-- 返回创建/更新结果
-
-### Phase 5：容器复制与多用户准备
-- 标准化 container 镜像与环境变量
-- 支持多实例
+SQL is written to be compatible with both dialects. PG-specific features (e.g. JSON operators) are avoided in the core query paths.
 
 ---
 
-## 12. 最终建议执行顺序
+## 10. Security
 
-1. 单用户 container + API service + AnkiConnect 通路
-2. 固化 `vocab-basic` 模板
-3. 实现 `/v0/notes/upsert`
-4. 接入 Discord skill 和 Binding DB
+- AnkiConnect is **not** exposed outside the container
+- External callers only reach the API service
+- Each container has an independent Bearer token
+- API service listens on a controlled network interface only
+
+---
+
+## 11. Phased implementation plan
+
+### Phase 1 — Core execution path
+- Single-user container with Anki + AnkiConnect running
+- API service: `/health`, deck list/create, note create/find/update
+
+### Phase 2 — Business template layer
+- Define `vocab-basic` template
+- Template CRUD
+- Render rules
+- `canonical_term` normalization
+
+### Phase 3 — Upsert
+- `lookup` implementation
+- Merge / update rules
+- `POST /v0/notes/upsert`
+
+### Phase 4 — Discord skill integration
+- Binding DB schema and query interface
+- Skill routing by `discord_user_id`
+- Return created/updated result to user
+
+### Phase 5 — Multi-user prep
+- Standardize container image and env vars
+- Support multiple instances
+
+---
+
+## 12. Recommended build order
+
+1. Single-user container + API service + AnkiConnect connectivity
+2. Lock down `vocab-basic` template
+3. Implement `/v0/notes/upsert`
+4. Wire up Discord skill + Binding DB

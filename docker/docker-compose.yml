@@ -1,0 +1,44 @@
+# docker-compose.yml — single-user Anki + anki-remote-api stack
+#
+# Required env vars (set in .env or environment):
+#   ANKI_SYNC_HKEY   — AnkiWeb sync token (obtain via: go run ./cmd/ankiauth)
+#   API_TOKEN        — Bearer token for anki-remote-api
+#   DATABASE_URL     — e.g. sqlite:///data/app.db or postgres://...
+
+services:
+  anki:
+    build:
+      context: ./anki
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ANKI_SYNC_HKEY: ${ANKI_SYNC_HKEY}
+      ANKI_PROFILE: "User 1"
+      ANKICONNECT_URL: "http://localhost:8765"
+    volumes:
+      - anki-data:/anki-data
+    # AnkiConnect is NOT exposed to the host — only reachable by the api service
+    # within the same compose network.
+    expose:
+      - "8765"
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${LISTEN_PORT:-8080}:8080"
+    environment:
+      ANKICONNECT_URL: "http://anki:8765"
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/app.db}
+      API_TOKEN: ${API_TOKEN}
+      LISTEN_ADDR: ":8080"
+    volumes:
+      - api-data:/data
+    depends_on:
+      - anki
+
+volumes:
+  anki-data:
+  api-data:

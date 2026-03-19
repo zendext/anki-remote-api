@@ -53,3 +53,14 @@ The DB driver is selected automatically from the `DATABASE_URL` scheme.
 ## Status
 
 > Phase 1 in progress
+
+## Getting an AnkiWeb hkey
+
+The container requires `ANKI_SYNC_HKEY` rather than a plain password.
+Use the included `ankiauth` tool to retrieve it once:
+
+```bash
+ANKI_EMAIL=you@example.com ANKI_PASSWORD=secret go run ./cmd/ankiauth
+```
+
+Store the printed hkey as `ANKI_SYNC_HKEY` in your container env. It remains valid until you change your AnkiWeb password.

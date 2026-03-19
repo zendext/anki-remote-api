@@ -2,8 +2,8 @@
 
 ## A. Research / Foundations
 
-- [ ] Confirm minimal viable setup for running Anki + AnkiConnect inside a container
-- [ ] Confirm API service → AnkiConnect call pattern and health check approach
+- [x] Confirm minimal viable setup for running Anki + AnkiConnect inside a container
+- [x] Verify AnkiWeb sync v11 hostKey login protocol (zstd + anki-sync header)
 - [ ] Confirm AnkiConnect interfaces needed for note lookup and update
 
 ## B. API Service Skeleton

@@ -2,10 +2,10 @@
 # Provides a virtual-desktop Anki instance accessible via VNC/noVNC and optionally AnkiConnect.
 FROM debian:bookworm-slim
 
-# Default build/download proxy for this workspace. Can be overridden at build time.
-ARG HTTP_PROXY="http://192.168.50.1:23456"
-ARG HTTPS_PROXY="http://192.168.50.1:23456"
-ARG NO_PROXY="localhost,127.0.0.1,::1"
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
     http_proxy=${HTTP_PROXY} \

@@ -2,128 +2,148 @@
 
 A lightweight HTTP API service for remote Anki card creation and management.
 
-This project sits between an HTTP caller and a per-user Anki Desktop runtime. The current validated runtime direction is a **non-root Anki Desktop container** with a **virtual desktop** exposed over **VNC/noVNC**.
-
-## Current runtime direction
-
-The current container strategy is:
-
-- **Anki Desktop** running inside Docker
-- **non-root user** (`uid=1000`, `gid=1000`)
-- **TigerVNC + openbox + noVNC** for a virtual desktop
-- persistent host mounts for:
-  - Anki data directory
-  - launcher-installed program files / virtualenv
-  - uv cache
-
-This keeps the runtime independent from the host desktop session while still allowing first-run debugging and manual setup through a browser.
-
-## What it does
-
-Planned service responsibilities:
-
-- Accept structured flashcard payloads over HTTP
-- Deduplicate by `canonical_term` before writing
-- Create or merge-update notes via AnkiConnect
-- Manage deck and business template configuration
+This project sits between an HTTP caller and a per-user Anki Desktop runtime. The validated runtime uses a **non-root Anki Desktop container** with a **virtual desktop exposed over VNC/noVNC** and a **bridge API container** sharing the same network namespace.
 
 ## Architecture
 
 ```text
 HTTP client
      ↓
-anki-remote-api  ← this project
-     ↓
-AnkiConnect
+anki-remote-api (bridge API container)
+     ↓  (localhost:8765, shared netns)
+AnkiConnect addon
      ↓
 Anki Desktop
+     ↓
+TigerVNC/noVNC (virtual desktop)
 ```
 
-Each user gets an isolated Anki runtime with its own profile, media directory, launcher state, and API token.
-
-## Tech stack
-
-- **Go** — planned service implementation
-- **Gin** — planned HTTP framework
-- **database/sql** — planned DB layer with pluggable drivers
-  - SQLite (`modernc.org/sqlite`, no CGO)
-  - PostgreSQL (`pgx`)
-- **Anki Desktop** — actual note runtime
-- **AnkiConnect** — addon used by the API layer
-
-## Current status
-
-### Runtime
-
-The Desktop container route is now validated far enough to confirm:
-
-- non-root container runtime works better than root
-- host X11 is **not required**
-- virtual desktop in-container is viable
-- first-run launcher state can be persisted and reused
-- Anki Desktop window can be brought up through noVNC
-
-### Still in progress
-
-- make first-run bootstrap and later steady-state startup cleaner
-- re-enable and validate AnkiConnect in the stabilized runtime path
-- implement the Go HTTP API service itself
+Each user gets an isolated stack:
+- one `anki-vnc` container (Anki Desktop + AnkiConnect + noVNC)
+- one `api` container sharing the `anki-vnc` network namespace
 
 ## Runtime model
 
-The container now uses a single runtime model:
+The desktop container (`anki-remote-api-anki:latest-vnc`):
 
-- always starts VNC/noVNC and the virtual desktop
-- starts launcher when the installed Anki runtime is not present yet
-- otherwise starts the installed Anki directly
-- keeps the desktop alive even if the current Anki process exits, so manual GUI intervention remains possible
+- Non-root user (`uid=1000`, `gid=1000`)
+- TigerVNC + openbox + noVNC virtual desktop
+- Single startup mode: launches launcher if Anki not installed, otherwise starts installed binary
+- Desktop stays alive even if Anki exits (manual recovery via noVNC remains possible)
+- VNC password optional; omit for insecure-public mode (development)
 
-This avoids splitting the GUI lifecycle into separate operational modes. The container is always started the same way, while higher-level orchestration can decide whether the runtime is ready for service.
+Persistent bind mounts:
 
-## Runtime mounts
+| Host path | Container path | Purpose |
+|-----------|---------------|---------|
+| `.../anki-data` | `/anki-data` | Anki profiles, media, collections |
+| `.../program-files` | `/home/anki/.local/share/AnkiProgramFiles` | launcher-installed Anki venv |
+| `.../uv-cache` | `/home/anki/.cache/uv` | uv package cache |
 
-Use persistent bind mounts for these container paths:
+## Running
 
-- `/anki-data`
-- `/home/anki/.local/share/AnkiProgramFiles`
-- `/home/anki/.cache/uv`
-
-### Important
-
-When using the non-root container, **do not rely on Docker to auto-create host bind-mount directories**.
-
-Create them yourself first and set ownership to `1000:1000`, otherwise Docker will usually create them as `root:root`, which causes permission problems.
-
-Example:
+### 1. Build images
 
 ```bash
-mkdir -p /path/to/anki-data
-mkdir -p /path/to/program-files
-mkdir -p /path/to/uv-cache
-chown -R 1000:1000 /path/to/anki-data /path/to/program-files /path/to/uv-cache
+# Anki desktop container
+cd docker/anki
+docker build \
+  --build-arg HTTP_PROXY=http://192.168.50.1:23456 \
+  --build-arg HTTPS_PROXY=http://192.168.50.1:23456 \
+  -t anki-remote-api-anki:latest-vnc .
+
+# Bridge API
+cd ../..
+docker build \
+  --build-arg HTTP_PROXY=http://192.168.50.1:23456 \
+  --build-arg HTTPS_PROXY=http://192.168.50.1:23456 \
+  -t anki-remote-api-api:latest .
 ```
 
-## Minimal bridge API
+### 2. Start Anki container
 
-A minimal Go bridge skeleton is now included.
+```bash
+docker run -d \
+  --name anki-remote-api-<user_id>-anki-vnc \
+  --restart unless-stopped \
+  --network macvlan_net --ip 192.168.51.15 \
+  -e ANKI_PROFILE="User 1" \
+  -e KEEP_DESKTOP_ALIVE=1 \
+  -e WAIT_FOR_ANKICONNECT=0 \
+  -v /mediapool/docker-data/anki-remote-api/<user_id>/anki-data:/anki-data \
+  -v /mediapool/docker-data/anki-remote-api/<user_id>/program-files:/home/anki/.local/share/AnkiProgramFiles \
+  -v /mediapool/docker-data/anki-remote-api/<user_id>/uv-cache:/home/anki/.cache/uv \
+  anki-remote-api-anki:latest-vnc
+```
 
-Current endpoints:
+### 3. Start bridge API container
 
-- `GET /health`
-- `GET /status`
-- `POST /anki/version`
-- `POST /anki/deck-names`
+The API container shares the Anki container's network namespace so it can reach `127.0.0.1:8765`:
 
-Environment variables used by the bridge:
+```bash
+docker run -d \
+  --name anki-remote-api-<user_id>-api \
+  --restart unless-stopped \
+  --network container:anki-remote-api-<user_id>-anki-vnc \
+  -e LISTEN_ADDR=:8080 \
+  -e ANKICONNECT_URL=http://127.0.0.1:8765 \
+  -e ANKI_BASE=/anki-data \
+  -e ANKI_PROGRAM_FILES_DIR=/home/anki/.local/share/AnkiProgramFiles \
+  -v /mediapool/docker-data/anki-remote-api/<user_id>/anki-data:/anki-data:ro \
+  -v /mediapool/docker-data/anki-remote-api/<user_id>/program-files:/home/anki/.local/share/AnkiProgramFiles:ro \
+  anki-remote-api-api:latest
+```
 
-- `LISTEN_ADDR` (default `:8080`)
-- `ANKICONNECT_URL` (default `http://127.0.0.1:8765`)
-- `ANKI_BASE` (default `/anki-data`)
-- `ANKI_PROGRAM_FILES_DIR` (default `/home/anki/.local/share/AnkiProgramFiles`)
+### Access
 
-The current `/status` response is intentionally simple and is meant to be the first bridge-side runtime probe.
+| Service | URL |
+|---------|-----|
+| noVNC (browser) | `http://<macvlan-ip>:6080/vnc.html` |
+| Bridge API | `http://<macvlan-ip>:8080` |
+| AnkiConnect (internal) | `http://127.0.0.1:8765` (localhost only) |
 
-## Documentation
+## API
 
-- [v0 Design](docs/v0-design.md)
-- [TODO](docs/todo.md)
+### `GET /health`
+
+```json
+{"ok": true}
+```
+
+### `GET /status`
+
+```json
+{
+  "desktop_up": true,
+  "anki_process_running": true,
+  "ankiconnect_ready": true,
+  "runtime_state": "installed",
+  "manual_intervention_required": false,
+  "program_files_ready": true
+}
+```
+
+### `POST /anki/version`
+
+Returns AnkiConnect version.
+
+### `POST /anki/deck-names`
+
+Returns list of deck names from the active profile.
+
+## Tech stack
+
+- **Go** + **Gin** — bridge API
+- **Anki Desktop** — actual note runtime
+- **AnkiConnect** — addon bridging HTTP → Anki internals
+- **TigerVNC + noVNC** — virtual desktop
+
+## Current status
+
+P0 goals are complete:
+
+- Desktop runtime validated and stable
+- Bridge API running, all implemented endpoints verified against live AnkiConnect
+- AnkiConnect reachable from bridge container via shared network namespace
+
+Next: Bearer token auth, deck ensure, note upsert.

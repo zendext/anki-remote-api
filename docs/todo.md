@@ -7,6 +7,7 @@
 - [x] Validate in-container VNC/noVNC desktop
 - [x] Persist launcher-installed Anki runtime
 - [x] Verify manual AnkiConnect installation works
+- [x] Remove VNC password requirement (insecure-public mode for development)
 - [ ] Define stable container status signals for bridge consumption
 
 ## B. Bridge API skeleton
@@ -17,6 +18,7 @@
 - [x] Implement `GET /status`
 - [x] Implement `POST /anki/version`
 - [x] Implement `POST /anki/deck-names`
+- [x] Validate bridge API reachable from within shared network namespace
 - [ ] Add config validation and startup diagnostics
 - [ ] Add Bearer token authentication middleware
 
@@ -48,16 +50,17 @@
 - [x] Update README to match current runtime model
 - [x] Remove obsolete sync/hkey bootstrap docs from primary runtime path
 - [x] Add API Dockerfile for bridge build
+- [x] Document container launch commands and network topology
 - [ ] Add API image self-test / smoke-test instructions
 
 ## Priority
 
-### P0
-- Desktop runtime stable enough for repeated use
-- Bridge health / status / version / deckNames
-- AnkiConnect reachable from bridge container
+### P0 — done
+- Desktop runtime stable enough for repeated use ✓
+- Bridge health / status / version / deckNames ✓
+- AnkiConnect reachable from bridge container ✓
 
-### P1
-- Authenticated bridge API
+### P1 — next
+- Bearer token auth middleware
 - Deck ensure and note upsert flow
 - Better runtime state reporting

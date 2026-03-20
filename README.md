@@ -2,18 +2,34 @@
 
 A lightweight HTTP API service for remote Anki card creation and management.
 
-Sits between any HTTP caller and a per-user Anki Desktop instance, handling deduplication, upsert logic, and template management on top of AnkiConnect.
+This project sits between an HTTP caller and a per-user Anki Desktop runtime. The current validated runtime direction is a **non-root Anki Desktop container** with a **virtual desktop** exposed over **VNC/noVNC**.
+
+## Current runtime direction
+
+The current container strategy is:
+
+- **Anki Desktop** running inside Docker
+- **non-root user** (`uid=1000`, `gid=1000`)
+- **TigerVNC + openbox + noVNC** for a virtual desktop
+- persistent host mounts for:
+  - Anki data directory
+  - launcher-installed program files / virtualenv
+  - uv cache
+
+This keeps the runtime independent from the host desktop session while still allowing first-run debugging and manual setup through a browser.
 
 ## What it does
 
-- Accepts structured flashcard payloads over HTTP
-- Deduplicates by `canonical_term` before writing
-- Creates or merge-updates notes via AnkiConnect
-- Manages deck and business template configuration
+Planned service responsibilities:
+
+- Accept structured flashcard payloads over HTTP
+- Deduplicate by `canonical_term` before writing
+- Create or merge-update notes via AnkiConnect
+- Manage deck and business template configuration
 
 ## Architecture
 
-```
+```text
 HTTP client
      ↓
 anki-remote-api  ← this project
@@ -23,44 +39,60 @@ AnkiConnect
 Anki Desktop
 ```
 
-Each user gets an isolated container with its own Anki profile, media directory, and API token. A binding registry maps external user identifiers to their respective service instances.
+Each user gets an isolated Anki runtime with its own profile, media directory, launcher state, and API token.
 
 ## Tech stack
 
-- **Go** — single binary, clean container image
-- **Gin** — HTTP framework
-- **database/sql** — DB layer with pluggable drivers
-  - SQLite (`modernc.org/sqlite`, no CGO) — for local / open-source use
-  - PostgreSQL (`pgx`) — for production
-- **AnkiConnect** — Anki addon, handles low-level note/deck operations
+- **Go** — planned service implementation
+- **Gin** — planned HTTP framework
+- **database/sql** — planned DB layer with pluggable drivers
+  - SQLite (`modernc.org/sqlite`, no CGO)
+  - PostgreSQL (`pgx`)
+- **Anki Desktop** — actual note runtime
+- **AnkiConnect** — addon used by the API layer
 
-## Configuration
+## Current status
 
-| Env var | Description | Example |
-|---------|-------------|---------|
-| `DATABASE_URL` | DB connection string | `postgres://user:pass@host/db` or `sqlite:///data/anki.db` |
-| `ANKICONNECT_URL` | AnkiConnect endpoint | `http://localhost:8765` |
-| `API_TOKEN` | Bearer token for this service | `your-secret-token` |
-| `LISTEN_ADDR` | HTTP listen address | `:8080` |
+### Runtime
 
-The DB driver is selected automatically from the `DATABASE_URL` scheme.
+The Desktop container route is now validated far enough to confirm:
+
+- non-root container runtime works better than root
+- host X11 is **not required**
+- virtual desktop in-container is viable
+- first-run launcher state can be persisted and reused
+- Anki Desktop window can be brought up through noVNC
+
+### Still in progress
+
+- make first-run bootstrap and later steady-state startup cleaner
+- re-enable and validate AnkiConnect in the stabilized runtime path
+- implement the Go HTTP API service itself
+
+## Runtime mounts
+
+Use persistent bind mounts for these container paths:
+
+- `/anki-data`
+- `/home/anki/.local/share/AnkiProgramFiles`
+- `/home/anki/.cache/uv`
+
+### Important
+
+When using the non-root container, **do not rely on Docker to auto-create host bind-mount directories**.
+
+Create them yourself first and set ownership to `1000:1000`, otherwise Docker will usually create them as `root:root`, which causes permission problems.
+
+Example:
+
+```bash
+mkdir -p /path/to/anki-data
+mkdir -p /path/to/program-files
+mkdir -p /path/to/uv-cache
+chown -R 1000:1000 /path/to/anki-data /path/to/program-files /path/to/uv-cache
+```
 
 ## Documentation
 
 - [v0 Design](docs/v0-design.md)
 - [TODO](docs/todo.md)
-
-## Status
-
-> Phase 1 in progress
-
-## Getting an AnkiWeb hkey
-
-The container requires `ANKI_SYNC_HKEY` rather than a plain password.
-Use the included `ankiauth` tool to retrieve it once:
-
-```bash
-ANKI_EMAIL=you@example.com ANKI_PASSWORD=secret go run ./cmd/ankiauth
-```
-
-Store the printed hkey as `ANKI_SYNC_HKEY` in your container env. It remains valid until you change your AnkiWeb password.

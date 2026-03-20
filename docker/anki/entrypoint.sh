@@ -3,7 +3,6 @@ set -euo pipefail
 
 ANKI_BASE="${ANKI_BASE:-/anki-data}"
 PROFILE="${ANKI_PROFILE:-User 1}"
-PREFS_DB="${ANKI_BASE}/prefs21.db"
 DISPLAY="${DISPLAY:-:1}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-anki}"
 ANKI_HOME="/home/anki"
@@ -63,15 +62,8 @@ echo "[entrypoint] starting noVNC on :${NOVNC_PORT} -> localhost:${VNC_PORT}"
 websockify --web=/usr/share/novnc/ ${NOVNC_PORT} 127.0.0.1:${VNC_PORT} > >(sed 's/^/[novnc] /') 2> >(sed 's/^/[novnc][stderr] /' >&2) &
 NOVNC_PID=$!
 
-# 2. Inject sync hkey
-if [[ -n "${ANKI_SYNC_HKEY:-}" ]]; then
-    echo "[entrypoint] injecting sync hkey into prefs21.db"
-    run_as_anki "python3 /usr/local/bin/inject_hkey.py $(shell_quote "${PREFS_DB}") $(shell_quote "${PROFILE}") $(shell_quote "${ANKI_SYNC_HKEY}")"
-else
-    echo "[entrypoint] ANKI_SYNC_HKEY not set — skipping sync configuration"
-fi
 
-# 3. Start Anki
+# 2. Start Anki
 ANKI_LOG="${ANKI_BASE}/anki-startup.log"
 run_as_anki "rm -f $(shell_quote "${ANKI_LOG}") && touch $(shell_quote "${ANKI_LOG}")"
 if [[ -x "${REAL_ANKI}" ]]; then

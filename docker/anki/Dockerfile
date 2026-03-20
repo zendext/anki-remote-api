@@ -124,7 +124,6 @@ RUN if [ "${INSTALL_ANKICONNECT}" = "1" ]; then \
     && rm -f /tmp/ankiconnect.json \
     && chown -R ${ANKI_UID}:${ANKI_GID} /home/anki/.local
 
-COPY inject_hkey.py /usr/local/bin/inject_hkey.py
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

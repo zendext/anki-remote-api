@@ -44,6 +44,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tigervnc-standalone-server \
+    tigervnc-tools \
     openbox \
     novnc \
     websockify \

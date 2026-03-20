@@ -103,6 +103,26 @@ mkdir -p /path/to/uv-cache
 chown -R 1000:1000 /path/to/anki-data /path/to/program-files /path/to/uv-cache
 ```
 
+## Minimal bridge API
+
+A minimal Go bridge skeleton is now included.
+
+Current endpoints:
+
+- `GET /health`
+- `GET /status`
+- `POST /anki/version`
+- `POST /anki/deck-names`
+
+Environment variables used by the bridge:
+
+- `LISTEN_ADDR` (default `:8080`)
+- `ANKICONNECT_URL` (default `http://127.0.0.1:8765`)
+- `ANKI_BASE` (default `/anki-data`)
+- `ANKI_PROGRAM_FILES_DIR` (default `/home/anki/.local/share/AnkiProgramFiles`)
+
+The current `/status` response is intentionally simple and is meant to be the first bridge-side runtime probe.
+
 ## Documentation
 
 - [v0 Design](docs/v0-design.md)

@@ -41,16 +41,18 @@ func NewServer(cfg Config) *Server {
 func (s *Server) Handler() http.Handler { return s.router }
 
 func (s *Server) routes() {
-	s.router.GET("/health", s.handleHealth)
-	s.router.GET("/status", s.handleStatus)
+	// Relay root: fully compatible with AnkiConnect's POST /
+	s.router.POST("/", s.handleRelay)
 
-	// AnkiConnect relay: all actions go through POST /anki
-	s.router.POST("/anki", s.handleRelay)
+	// Internal probes under /_/ to avoid conflicting with AnkiConnect actions
+	internal := s.router.Group("/_")
+	internal.GET("/health", s.handleHealth)
+	internal.GET("/status", s.handleStatus)
 }
 
 // handleRelay forwards the request body directly to AnkiConnect and returns
-// its response verbatim. The caller is responsible for constructing a valid
-// AnkiConnect envelope: {"action":"...","version":6,"params":{...}}
+// its response verbatim. The caller sends a standard AnkiConnect envelope:
+// {"action":"...","version":6,"params":{...}}
 func (s *Server) handleRelay(c *gin.Context) {
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {

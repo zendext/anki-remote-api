@@ -1,14 +1,16 @@
 # ankiconnect-relay
 
-A thin HTTP relay that exposes [AnkiConnect](https://foosoft.net/projects/anki-connect/) to the network.
+A thin HTTP relay that exposes [AnkiConnect](https://ankiweb.net/shared/info/2055492159) to the network.
 
-AnkiConnect only listens on `127.0.0.1:8765` inside the Anki Desktop container. This relay runs in the same network namespace and forwards requests from external callers to AnkiConnect, returning the response verbatim.
+AnkiConnect only listens on `127.0.0.1:8765` inside the Anki Desktop container. This relay runs in the same network namespace and forwards all requests from external callers to AnkiConnect, returning responses verbatim.
+
+The relay is fully API-compatible with AnkiConnect. Any existing AnkiConnect client only needs to change the target URL — no other modifications required.
 
 ## Architecture
 
 ```text
 external caller
-      ↓  POST /anki
+      ↓  POST /
 ankiconnect-relay  (shared network namespace)
       ↓  POST 127.0.0.1:8765
 AnkiConnect addon
@@ -20,34 +22,9 @@ TigerVNC / noVNC (virtual desktop)
 
 ## API
 
-### `GET /health`
+### AnkiConnect relay — `POST /`
 
-Liveness check.
-
-```json
-{"ok": true}
-```
-
-### `GET /status`
-
-Runtime state probe. Reports whether Anki is installed, running, and AnkiConnect is reachable.
-
-```json
-{
-  "desktop_up": true,
-  "anki_process_running": true,
-  "ankiconnect_ready": true,
-  "runtime_state": "installed",
-  "manual_intervention_required": false,
-  "program_files_ready": true
-}
-```
-
-### `POST /anki`
-
-Relay endpoint. Forwards the request body to AnkiConnect and returns its response verbatim.
-
-The caller constructs a standard AnkiConnect envelope:
+Fully compatible with the AnkiConnect protocol. Send any standard AnkiConnect envelope:
 
 ```json
 {
@@ -59,7 +36,7 @@ The caller constructs a standard AnkiConnect envelope:
 
 **Examples**
 
-Create a deck:
+Create a deck (supports hierarchy with `::`):
 ```json
 {"action": "createDeck", "version": 6, "params": {"deck": "My Deck::Sub Deck"}}
 ```
@@ -102,6 +79,15 @@ Add a note:
 
 Full AnkiConnect action reference: https://foosoft.net/projects/anki-connect/
 
+### Internal probes
+
+These endpoints are relay-specific and do not conflict with any AnkiConnect action.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /_/health` | Liveness check — `{"ok": true}` |
+| `GET /_/status` | Runtime state — Anki process, AnkiConnect availability, install state |
+
 ## Running
 
 ### 1. Build images
@@ -111,7 +97,7 @@ Full AnkiConnect action reference: https://foosoft.net/projects/anki-connect/
 cd docker/anki
 docker build -t ankiconnect-relay-anki:latest .
 
-# Relay API
+# Relay
 cd ../..
 docker build -t ankiconnect-relay:latest .
 ```
@@ -137,7 +123,7 @@ Open the noVNC desktop (`http://<host>:6080/vnc.html`) and complete:
 
 1. Set display language in Anki preferences
 2. Log in to AnkiWeb and sync
-3. Install AnkiConnect add-on (code `2055492159`) via Tools → Add-ons → Get Add-ons
+3. Install AnkiConnect add-on (code `2055492159`) via Tools → Add-ons → Get Add-ons, or visit https://ankiweb.net/shared/info/2055492159
 4. Restart the container — AnkiConnect activates after a full restart
 
 ### 4. Start relay container
@@ -164,8 +150,8 @@ docker run -d \
 |----------|---------|-------------|
 | `LISTEN_ADDR` | `:8080` | Relay listen address |
 | `ANKICONNECT_URL` | `http://127.0.0.1:8765` | AnkiConnect endpoint |
-| `ANKI_BASE` | `/anki-data` | Anki data directory (for /status) |
-| `ANKI_PROGRAM_FILES_DIR` | `/home/anki/.local/share/AnkiProgramFiles` | Launcher install dir (for /status) |
+| `ANKI_BASE` | `/anki-data` | Anki data directory (for `/_/status`) |
+| `ANKI_PROGRAM_FILES_DIR` | `/home/anki/.local/share/AnkiProgramFiles` | Launcher install dir (for `/_/status`) |
 
 ## Tech stack
 

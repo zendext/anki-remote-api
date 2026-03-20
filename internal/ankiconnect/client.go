@@ -24,17 +24,6 @@ func New(baseURL string, timeout time.Duration) *Client {
 	}
 }
 
-type Request struct {
-	Action  string          `json:"action"`
-	Version int             `json:"version"`
-	Params  json.RawMessage `json:"params,omitempty"`
-}
-
-type Response struct {
-	Result json.RawMessage `json:"result"`
-	Error  interface{}     `json:"error"`
-}
-
 // Do relays a raw AnkiConnect request and returns the raw response body.
 func (c *Client) Do(ctx context.Context, body []byte) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
@@ -56,8 +45,8 @@ func (c *Client) Do(ctx context.Context, body []byte) ([]byte, error) {
 	return raw, nil
 }
 
-// Invoke is a typed helper for internal use (health/status probes).
-func (c *Client) Invoke(ctx context.Context, action string, params interface{}, out interface{}) error {
+// invoke is an internal helper used only by status probes.
+func (c *Client) invoke(ctx context.Context, action string, params interface{}, out interface{}) error {
 	envelope := struct {
 		Action  string      `json:"action"`
 		Version int         `json:"version"`
@@ -72,14 +61,16 @@ func (c *Client) Invoke(ctx context.Context, action string, params interface{}, 
 	if err != nil {
 		return err
 	}
-	var r Response
+
+	var r struct {
+		Result json.RawMessage `json:"result"`
+		Error  interface{}     `json:"error"`
+	}
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return fmt.Errorf("decode: %w", err)
 	}
-	if r.Error != nil {
-		if s, ok := r.Error.(string); ok && s != "" {
-			return fmt.Errorf("ankiconnect: %s", s)
-		}
+	if s, ok := r.Error.(string); ok && s != "" {
+		return fmt.Errorf("ankiconnect: %s", s)
 	}
 	if out != nil {
 		return json.Unmarshal(r.Result, out)
@@ -87,12 +78,9 @@ func (c *Client) Invoke(ctx context.Context, action string, params interface{}, 
 	return nil
 }
 
+// Version probes AnkiConnect and returns its version number.
+// Used internally by the /_/status endpoint.
 func (c *Client) Version(ctx context.Context) (int, error) {
 	var v int
-	return v, c.Invoke(ctx, "version", nil, &v)
-}
-
-func (c *Client) DeckNames(ctx context.Context) ([]string, error) {
-	var d []string
-	return d, c.Invoke(ctx, "deckNames", nil, &d)
+	return v, c.invoke(ctx, "version", nil, &v)
 }

@@ -14,7 +14,7 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
 WORKDIR /src
 COPY . .
 RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/anki-remote-api ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/ankiconnect-relay ./cmd/server
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -22,10 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
-COPY --from=build /out/anki-remote-api /usr/local/bin/anki-remote-api
+COPY --from=build /out/ankiconnect-relay /usr/local/bin/ankiconnect-relay
 ENV LISTEN_ADDR=:8080 \
     ANKICONNECT_URL=http://127.0.0.1:8765 \
     ANKI_BASE=/anki-data \
     ANKI_PROGRAM_FILES_DIR=/home/anki/.local/share/AnkiProgramFiles
 EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/anki-remote-api"]
+ENTRYPOINT ["/usr/local/bin/ankiconnect-relay"]

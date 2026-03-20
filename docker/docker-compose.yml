@@ -3,14 +3,16 @@
 #
 # Host bind-mount directories MUST be created in advance and owned by 1000:1000.
 # Do not rely on Docker auto-creating them for the non-root desktop container.
+#
+# Note: the relay container uses network_mode: service:anki so it shares the
+# Anki container's network namespace and can reach AnkiConnect on 127.0.0.1:8765.
 
 services:
   anki:
-    image: anki-remote-api-anki:latest-vnc
+    image: ankiconnect-relay-anki:latest
     restart: unless-stopped
     environment:
       ANKI_PROFILE: "User 1"
-      VNC_PASSWORD: ${VNC_PASSWORD:-12345678}
       WAIT_FOR_ANKICONNECT: "0"
       KEEP_DESKTOP_ALIVE: "1"
     ports:
@@ -20,23 +22,22 @@ services:
       - ${ANKI_DATA_DIR:-./.data/anki-data}:/anki-data
       - ${ANKI_PROGRAM_FILES_DIR:-./.data/program-files}:/home/anki/.local/share/AnkiProgramFiles
       - ${ANKI_UV_CACHE_DIR:-./.data/uv-cache}:/home/anki/.cache/uv
-    expose:
-      - "8765"
 
-  api:
+  relay:
     build:
       context: ..
       dockerfile: Dockerfile
       args:
-        HTTP_PROXY: ${HTTP_PROXY:-http://192.168.50.1:23456}
-        HTTPS_PROXY: ${HTTPS_PROXY:-http://192.168.50.1:23456}
-        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
     restart: unless-stopped
+    network_mode: "service:anki"
     ports:
       - "${LISTEN_PORT:-8080}:8080"
     environment:
       LISTEN_ADDR: ":8080"
-      ANKICONNECT_URL: "http://anki:8765"
+      ANKICONNECT_URL: "http://127.0.0.1:8765"
       ANKI_BASE: "/anki-data"
       ANKI_PROGRAM_FILES_DIR: "/home/anki/.local/share/AnkiProgramFiles"
     volumes:

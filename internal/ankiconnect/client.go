@@ -1,97 +1,98 @@
 package ankiconnect
 
 import (
-    "bytes"
-    "context"
-    "encoding/json"
-    "fmt"
-    "io"
-    "net/http"
-    "time"
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
 )
 
 type Client struct {
-    baseURL    string
-    httpClient *http.Client
+	baseURL    string
+	httpClient *http.Client
 }
 
-type Envelope struct {
-    Action  string      `json:"action"`
-    Version int         `json:"version"`
-    Params  interface{} `json:"params,omitempty"`
+func New(baseURL string, timeout time.Duration) *Client {
+	return &Client{
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: timeout,
+		},
+	}
+}
+
+type Request struct {
+	Action  string          `json:"action"`
+	Version int             `json:"version"`
+	Params  json.RawMessage `json:"params,omitempty"`
 }
 
 type Response struct {
-    Result json.RawMessage `json:"result"`
-    Error  interface{}     `json:"error"`
+	Result json.RawMessage `json:"result"`
+	Error  interface{}     `json:"error"`
 }
 
-type VersionResult int
+// Do relays a raw AnkiConnect request and returns the raw response body.
+func (c *Client) Do(ctx context.Context, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
 
-func New(baseURL string, timeout time.Duration) *Client {
-    return &Client{
-        baseURL: baseURL,
-        httpClient: &http.Client{
-            Timeout: timeout,
-        },
-    }
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("post ankiconnect: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	return raw, nil
 }
 
-func (c *Client) Do(ctx context.Context, action string, params interface{}, out interface{}) error {
-    payload := Envelope{Action: action, Version: 6, Params: params}
-    body, err := json.Marshal(payload)
-    if err != nil {
-        return fmt.Errorf("marshal request: %w", err)
-    }
+// Invoke is a typed helper for internal use (health/status probes).
+func (c *Client) Invoke(ctx context.Context, action string, params interface{}, out interface{}) error {
+	envelope := struct {
+		Action  string      `json:"action"`
+		Version int         `json:"version"`
+		Params  interface{} `json:"params,omitempty"`
+	}{Action: action, Version: 6, Params: params}
 
-    req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
-    if err != nil {
-        return fmt.Errorf("build request: %w", err)
-    }
-    req.Header.Set("Content-Type", "application/json")
-
-    resp, err := c.httpClient.Do(req)
-    if err != nil {
-        return fmt.Errorf("post anki connect: %w", err)
-    }
-    defer resp.Body.Close()
-
-    raw, err := io.ReadAll(resp.Body)
-    if err != nil {
-        return fmt.Errorf("read response: %w", err)
-    }
-
-    if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-        return fmt.Errorf("anki connect http %d: %s", resp.StatusCode, string(raw))
-    }
-
-    var envelopeResp Response
-    if err := json.Unmarshal(raw, &envelopeResp); err != nil {
-        return fmt.Errorf("decode response: %w", err)
-    }
-    if envelopeResp.Error != nil {
-        return fmt.Errorf("anki connect error: %v", envelopeResp.Error)
-    }
-    if out != nil {
-        if err := json.Unmarshal(envelopeResp.Result, out); err != nil {
-            return fmt.Errorf("decode result: %w", err)
-        }
-    }
-    return nil
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	raw, err := c.Do(ctx, body)
+	if err != nil {
+		return err
+	}
+	var r Response
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return fmt.Errorf("decode: %w", err)
+	}
+	if r.Error != nil {
+		if s, ok := r.Error.(string); ok && s != "" {
+			return fmt.Errorf("ankiconnect: %s", s)
+		}
+	}
+	if out != nil {
+		return json.Unmarshal(r.Result, out)
+	}
+	return nil
 }
 
 func (c *Client) Version(ctx context.Context) (int, error) {
-    var version int
-    if err := c.Do(ctx, "version", nil, &version); err != nil {
-        return 0, err
-    }
-    return version, nil
+	var v int
+	return v, c.Invoke(ctx, "version", nil, &v)
 }
 
 func (c *Client) DeckNames(ctx context.Context) ([]string, error) {
-    var decks []string
-    if err := c.Do(ctx, "deckNames", nil, &decks); err != nil {
-        return nil, err
-    }
-    return decks, nil
+	var d []string
+	return d, c.Invoke(ctx, "deckNames", nil, &d)
 }

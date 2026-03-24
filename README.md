@@ -9,8 +9,35 @@ This repository now has two separate concerns:
 
 AnkiConnect usually listens on `127.0.0.1:8765` inside the Anki container, so external clients cannot reach it directly. `ankiconnect-relay` runs in the same network namespace, forwards requests to the local AnkiConnect endpoint, and returns responses unchanged.
 
+## Prebuilt image
+
+A prebuilt Anki Desktop + noVNC image is published on Docker Hub:
+
+- `zendext/anki-novnc:25.09.2-build1`
+- `zendext/anki-novnc:25.09.2`
+- `zendext/anki-novnc:25.09`
+
+Example:
+
+```bash
+docker pull zendext/anki-novnc:25.09.2-build1
+```
+
+Release tags use this format:
+
+```text
+anki-<anki_version>-build<build_number>
+```
+
+Example:
+
+```text
+anki-25.09.2-build1
+```
+
 ## Highlights
 
+- Prebuilt `anki-novnc` image on Docker Hub
 - AnkiConnect-compatible relay at `POST /`
 - No client changes beyond replacing the base URL
 - Health and status probes for automation
@@ -76,7 +103,7 @@ Example health response:
 
 ## Quick start
 
-### Docker Compose
+### Use the prebuilt image
 
 1. Prepare data directories and ensure they are writable by `1000:1000`:
 
@@ -91,17 +118,18 @@ chown -R 1000:1000 ./.data
 cp docker/.env.example docker/.env
 ```
 
-3. Build the Anki desktop image:
+3. Set the Anki image in `docker/docker-compose.yml` to the published image tag you want to use, for example:
 
-```bash
-docker build -t ankiconnect-relay-anki:latest ./docker/anki
+```yaml
+services:
+  anki:
+    image: zendext/anki-novnc:25.09.2-build1
 ```
 
 4. Start the stack:
 
 ```bash
 cd docker
-docker compose build
 docker compose up -d
 ```
 
@@ -111,7 +139,7 @@ docker compose up -d
 http://<host>:6080/vnc.html
 ```
 
-6. Verify the relay:
+6. If you install AnkiConnect manually inside Anki, verify the relay:
 
 ```bash
 curl -s http://<host>:8080/_/health
@@ -121,16 +149,26 @@ curl -s http://<host>:8080/ \
   -d '{"action":"version","version":6}'
 ```
 
+### Build locally
+
+If you want to build the desktop image yourself:
+
+```bash
+docker build -t ankiconnect-relay-anki:latest ./docker/anki
+```
+
+Then continue with the Compose stack as usual.
+
 ## First run
 
 On first launch, open the noVNC desktop and complete the one-time Anki setup:
 
 1. Choose language and confirm the expected profile
 2. Log in to AnkiWeb and sync if needed
-3. Install or verify the AnkiConnect add-on
+3. Install AnkiConnect manually if your workflow requires it
    - code: `2055492159`
    - URL: https://ankiweb.net/shared/info/2055492159
-4. Restart the Anki container
+4. Restart the Anki container after installing add-ons
 
 If `version` succeeds afterward, the stack is ready.
 
@@ -155,6 +193,14 @@ If `version` succeeds afterward, the stack is ready.
 | `VNC_PORT` | `5901` | TigerVNC port |
 | `NOVNC_PORT` | `6080` | noVNC port |
 | `VNC_PASSWORD` | empty | Optional VNC password |
+
+## Release notes
+
+Current public image line:
+
+- based on Anki `25.09.2`
+- first public Docker Hub image line for `zendext/anki-novnc`
+- AnkiConnect is not preinstalled
 
 ## Troubleshooting
 

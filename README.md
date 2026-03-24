@@ -73,7 +73,9 @@ This is the key design choice that lets the relay reach `127.0.0.1:8765` inside 
 
 ### `POST /`
 
-Fully compatible with the AnkiConnect protocol. Send any standard AnkiConnect envelope:
+The relay is protocol-compatible with AnkiConnect and forwards the request body to the local AnkiConnect endpoint unchanged.
+
+Send a standard AnkiConnect envelope:
 
 ```json
 {
@@ -83,73 +85,17 @@ Fully compatible with the AnkiConnect protocol. Send any standard AnkiConnect en
 }
 ```
 
-The relay forwards the raw request body to AnkiConnect and returns the raw response body unchanged.
-
-### Example: create a deck
-
-```json
-{
-  "action": "createDeck",
-  "version": 6,
-  "params": {
-    "deck": "My Deck::Sub Deck"
-  }
-}
-```
-
-### Example: create a note type
-
-```json
-{
-  "action": "createModel",
-  "version": 6,
-  "params": {
-    "modelName": "vocab-basic",
-    "inOrderFields": ["Front", "Back", "Phonetic", "Example"],
-    "isCloze": false,
-    "cardTemplates": [
-      {
-        "Name": "Card 1",
-        "Front": "{{Front}}",
-        "Back": "{{FrontSide}}<hr id=answer>{{Back}}"
-      }
-    ]
-  }
-}
-```
-
-### Example: add a note
-
-```json
-{
-  "action": "addNote",
-  "version": 6,
-  "params": {
-    "note": {
-      "deckName": "My Deck",
-      "modelName": "vocab-basic",
-      "fields": {
-        "Front": "ephemeral",
-        "Back": "adj. short-lived"
-      },
-      "tags": []
-    }
-  }
-}
-```
-
-### Example: query version with curl
-
-```bash
-curl -s http://localhost:8080/ \
-  -H 'Content-Type: application/json' \
-  -d '{"action":"version","version":6}'
-```
-
-For the full AnkiConnect action reference, see:
+This project intentionally does not duplicate the full AnkiConnect API documentation.
+For supported actions, request/response formats, and detailed examples, see the upstream docs:
 
 - https://foosoft.net/projects/anki-connect/
 - https://ankiweb.net/shared/info/2055492159
+
+Minimal connectivity check:
+
+```bash
+curl -s http://localhost:8080/   -H 'Content-Type: application/json'   -d '{"action":"version","version":6}'
+```
 
 ### Internal probe endpoints
 

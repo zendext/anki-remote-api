@@ -2,6 +2,11 @@
 
 A thin HTTP relay that exposes [AnkiConnect](https://ankiweb.net/shared/info/2055492159) from a containerized Anki Desktop runtime.
 
+This repository now has two separate concerns:
+
+- `docker/anki`: a containerized Anki Desktop runtime with noVNC access
+- `ankiconnect-relay`: an optional companion relay for exposing AnkiConnect after you install it manually inside Anki
+
 AnkiConnect usually listens on `127.0.0.1:8765` inside the Anki container, so external clients cannot reach it directly. `ankiconnect-relay` runs in the same network namespace, forwards requests to the local AnkiConnect endpoint, and returns responses unchanged.
 
 ## Highlights

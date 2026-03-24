@@ -1,5 +1,5 @@
 # docker/anki/Dockerfile
-# Provides a virtual-desktop Anki instance accessible via VNC/noVNC and optionally AnkiConnect.
+# Provides a virtual-desktop Anki instance accessible via VNC/noVNC.
 FROM debian:bookworm-slim
 
 

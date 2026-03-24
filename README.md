@@ -44,9 +44,8 @@ Send a standard AnkiConnect envelope:
 }
 ```
 
-This project does not duplicate the full AnkiConnect API docs. See:
+This project does not duplicate the full AnkiConnect API docs. See the add-on page:
 
-- https://foosoft.net/projects/anki-connect/
 - https://ankiweb.net/shared/info/2055492159
 
 Minimal connectivity check:

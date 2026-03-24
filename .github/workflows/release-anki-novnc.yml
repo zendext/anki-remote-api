@@ -1,0 +1,79 @@
+name: release-anki-novnc
+
+on:
+  push:
+    tags:
+      - "anki-*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/zendext/anki-novnc
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse release tag
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RAW_TAG="${GITHUB_REF_NAME}"
+          if [[ ! "$RAW_TAG" =~ ^anki-([0-9]+\.[0-9]+\.[0-9]+)-build([0-9]+)$ ]]; then
+            echo "Invalid tag format: $RAW_TAG" >&2
+            echo "Expected: anki-25.09.2-build1" >&2
+            exit 1
+          fi
+
+          ANKI_VERSION="${BASH_REMATCH[1]}"
+          BUILD_NUMBER="${BASH_REMATCH[2]}"
+          ANKI_SERIES="$(cut -d. -f1,2 <<<"$ANKI_VERSION")"
+          VERSIONED_TAG="${ANKI_VERSION}-build${BUILD_NUMBER}"
+
+          {
+            echo "anki_version=$ANKI_VERSION"
+            echo "anki_series=$ANKI_SERIES"
+            echo "versioned_tag=$VERSIONED_TAG"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: docker_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.meta.outputs.versioned_tag }}
+            type=raw,value=${{ steps.meta.outputs.anki_version }}
+            type=raw,value=${{ steps.meta.outputs.anki_series }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/anki
+          file: ./docker/anki/Dockerfile
+          push: true
+          build-args: |
+            ANKI_VERSION=${{ steps.meta.outputs.anki_version }}
+            ANKI_SERIES=${{ steps.meta.outputs.anki_series }}
+          tags: ${{ steps.docker_meta.outputs.tags }}
+          labels: ${{ steps.docker_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

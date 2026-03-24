@@ -16,7 +16,6 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
 ARG ANKI_VERSION=25.09.2
 ARG ANKI_SERIES=25.09
 ARG ANKI_PKG=anki-launcher-${ANKI_SERIES}-linux
-ARG INSTALL_ANKICONNECT=1
 ARG ANKI_UID=1000
 ARG ANKI_GID=1000
 
@@ -35,7 +34,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
     ANKI_NOHIGHDPI=1 \
     XDG_RUNTIME_DIR=/tmp/runtime-anki \
     ANKI_BASE=/anki-data \
-    ANKICONNECT_VERSION=23.10.29.0 \
     HOME=/home/anki \
     VNC_GEOMETRY=1440x900 \
     VNC_DEPTH=24 \
@@ -108,21 +106,7 @@ RUN wget -q "https://github.com/ankitects/anki/releases/download/${ANKI_SERIES}/
     && ./install.sh \
     && cd .. && rm -rf "${ANKI_PKG}" "${ANKI_PKG}.tar.zst"
 
-RUN if [ "${INSTALL_ANKICONNECT}" = "1" ]; then \
-      mkdir -p /home/anki/.local/share/Anki2/addons21/AnkiConnect \
-      && wget -q "https://github.com/FooSoft/anki-connect/archive/refs/tags/${ANKICONNECT_VERSION}.tar.gz" \
-      && tar -xzf "${ANKICONNECT_VERSION}.tar.gz" \
-      && cp -r anki-connect-${ANKICONNECT_VERSION}/plugin/* /home/anki/.local/share/Anki2/addons21/AnkiConnect/ \
-      && rm -rf anki-connect-${ANKICONNECT_VERSION} "${ANKICONNECT_VERSION}.tar.gz"; \
-    fi
-
-COPY ankiconnect.json /tmp/ankiconnect.json
-RUN if [ "${INSTALL_ANKICONNECT}" = "1" ]; then \
-      mkdir -p /home/anki/.local/share/Anki2/addons21/AnkiConnect \
-      && cp /tmp/ankiconnect.json /home/anki/.local/share/Anki2/addons21/AnkiConnect/config.json; \
-    fi \
-    && rm -f /tmp/ankiconnect.json \
-    && chown -R ${ANKI_UID}:${ANKI_GID} /home/anki/.local
+RUN chown -R ${ANKI_UID}:${ANKI_GID} /home/anki/.local
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh

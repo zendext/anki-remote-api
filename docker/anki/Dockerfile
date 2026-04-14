@@ -3,16 +3,6 @@
 FROM debian:bookworm-slim
 
 
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
-ARG NO_PROXY
-ENV HTTP_PROXY=${HTTP_PROXY} \
-    HTTPS_PROXY=${HTTPS_PROXY} \
-    http_proxy=${HTTP_PROXY} \
-    https_proxy=${HTTPS_PROXY} \
-    NO_PROXY=${NO_PROXY} \
-    no_proxy=${NO_PROXY}
-
 ARG ANKI_VERSION=25.09.2
 ARG ANKI_SERIES=25.09
 ARG ANKI_PKG=anki-launcher-${ANKI_SERIES}-linux

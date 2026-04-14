@@ -8,6 +8,7 @@ ARG ANKI_SERIES=25.09
 ARG ANKI_PKG=anki-launcher-${ANKI_SERIES}-linux
 ARG ANKI_UID=1000
 ARG ANKI_GID=1000
+ARG TZ=UTC
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:1 \
@@ -25,6 +26,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     XDG_RUNTIME_DIR=/tmp/runtime-anki \
     ANKI_BASE=/anki-data \
     HOME=/home/anki \
+    TZ=${TZ} \
     VNC_GEOMETRY=1440x900 \
     VNC_DEPTH=24 \
     VNC_PORT=5901 \
@@ -41,6 +43,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     zstd \
+    tzdata \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
     libglib2.0-0 \
     libgl1 \
     libegl1 \
@@ -82,6 +87,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     curl \
     procps \
+    && ln -snf "/usr/share/zoneinfo/${TZ}" /etc/localtime \
+    && echo "${TZ}" > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g ${ANKI_GID} anki \

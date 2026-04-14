@@ -15,6 +15,7 @@ services:
       ANKI_PROFILE: "User 1"
       WAIT_FOR_ANKICONNECT: "0"
       KEEP_DESKTOP_ALIVE: "1"
+      TZ: "${TZ:-UTC}"
     ports:
       - "${VNC_PORT:-5901}:5901"
       - "${NOVNC_PORT:-6080}:6080"

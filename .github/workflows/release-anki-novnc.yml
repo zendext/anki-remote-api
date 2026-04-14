@@ -46,6 +46,24 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Detect build timezone
+        id: tz
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${TZ:-}" ]]; then
+            TZ_VALUE="$TZ"
+          elif [[ -f /etc/timezone ]]; then
+            TZ_VALUE="$(tr -d '\n\r' </etc/timezone)"
+          elif [[ -L /etc/localtime ]]; then
+            TZ_VALUE="$(readlink -f /etc/localtime | sed 's#^/usr/share/zoneinfo/##')"
+          else
+            TZ_VALUE="UTC"
+          fi
+
+          echo "value=$TZ_VALUE" >> "$GITHUB_OUTPUT"
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -71,6 +89,7 @@ jobs:
           build-args: |
             ANKI_VERSION=${{ steps.meta.outputs.anki_version }}
             ANKI_SERIES=${{ steps.meta.outputs.anki_series }}
+            TZ=${{ steps.tz.outputs.value }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha

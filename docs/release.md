@@ -36,7 +36,7 @@ anki-<anki_version>-build<build_number>
 Example:
 
 ```text
-anki-25.09.2-build1
+anki-25.09.4-build1
 ```
 
 ## Published image tags
@@ -44,20 +44,20 @@ anki-25.09.2-build1
 For a release tag like:
 
 ```text
-anki-25.09.2-build1
+anki-25.09.4-build1
 ```
 
 The workflow publishes:
 
 ```text
-zendext/anki-novnc:25.09.2-build1
-zendext/anki-novnc:25.09.2
+zendext/anki-novnc:25.09.4-build1
+zendext/anki-novnc:25.09.4
 zendext/anki-novnc:25.09
 ```
 
 ## Create a release
 
 ```bash
-git tag anki-25.09.2-build1
-git push origin anki-25.09.2-build1
+git tag anki-25.09.4-build1
+git push origin anki-25.09.4-build1
 ```

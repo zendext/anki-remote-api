@@ -13,14 +13,14 @@ AnkiConnect usually listens on `127.0.0.1:8765` inside the Anki container, so ex
 
 A prebuilt Anki Desktop + noVNC image is published on Docker Hub:
 
-- `zendext/anki-novnc:25.09.2-build1`
-- `zendext/anki-novnc:25.09.2`
+- `zendext/anki-novnc:25.09.4-build1`
+- `zendext/anki-novnc:25.09.4`
 - `zendext/anki-novnc:25.09`
 
 Example:
 
 ```bash
-docker pull zendext/anki-novnc:25.09.2-build1
+docker pull zendext/anki-novnc:25.09.4-build1
 ```
 
 Release tags use this format:
@@ -32,7 +32,7 @@ anki-<anki_version>-build<build_number>
 Example:
 
 ```text
-anki-25.09.2-build1
+anki-25.09.4-build1
 ```
 
 ## Highlights
@@ -123,7 +123,7 @@ cp docker/.env.example docker/.env
 ```yaml
 services:
   anki:
-    image: zendext/anki-novnc:25.09.2-build1
+    image: zendext/anki-novnc:25.09.4-build1
 ```
 
 4. Start the stack:
@@ -198,7 +198,7 @@ If `version` succeeds afterward, the stack is ready.
 
 Current public image line:
 
-- based on Anki `25.09.2`
+- based on Anki `25.09.4`
 - first public Docker Hub image line for `zendext/anki-novnc`
 - AnkiConnect is not preinstalled
 
